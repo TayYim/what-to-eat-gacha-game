@@ -46,9 +46,11 @@ pnpm-debug.log*
 .nuxt/
 .svelte-kit/
 .vite/
+.wrangler/
 coverage/
 out/
 public/build/
+test-results/
 
 # Environment and local config
 .env
