@@ -1,10 +1,77 @@
 import { defaultCategories, defaultFoods, starterTags } from "../data/seed";
-import type { FoodCategory, FoodItem, LegacyStoredAppData, PickHistoryEntry, Rarity, StoredAppData } from "./types";
+import type {
+  FoodCategory,
+  FoodItem,
+  LegacyStoredAppData,
+  PickHistoryEntry,
+  PreviousStoredAppData,
+  StoredAppData,
+} from "./types";
 import { getAllTags } from "./filters";
 import { getRarityWeight, normalizeRarity } from "./random";
 
 const key = "what-to-eat-gacha:v1";
-const version = 2 as const;
+const version = 3 as const;
+
+const oldDefaultCategoryIds = new Set([
+  "rice",
+  "hotpot",
+  "grill",
+  "light",
+  "noodle",
+  "fast",
+  "jpkr",
+  "western",
+  "snack",
+  "drink",
+]);
+
+const oldDefaultFoodIds = new Set([
+  "huangmenji",
+  "mcdonalds",
+  "malaxiangguo",
+  "beef-hotpot",
+  "korean-bbq",
+  "caesar-salad",
+  "ramen",
+  "sushi",
+  "bibimbap",
+  "pizza",
+  "shaokao",
+  "bubble-tea",
+]);
+
+const oldDefaultManagedTags = new Set([
+  "全部",
+  "米饭",
+  "面",
+  "热乎",
+  "辣",
+  "轻食",
+  "快餐",
+  "聚餐",
+  "外卖",
+  "夜宵",
+  "低负担",
+  "工作餐",
+  "省心",
+  "重口",
+  "牛肉",
+  "肉类",
+  "仪式感",
+  "健身",
+  "日料",
+  "清爽",
+  "冷食",
+  "韩料",
+  "西餐",
+  "分享",
+  "芝士",
+  "烧烤",
+  "甜品",
+  "饮品",
+  "轻松",
+]);
 
 const cloneCategory = (category: FoodCategory): FoodCategory => ({ ...category });
 const cloneFood = (food: FoodItem): FoodItem => ({
@@ -35,6 +102,23 @@ export const isStoredAppData = (value: unknown): value is StoredAppData => {
   const record = value as Partial<StoredAppData>;
   return (
     record.storageVersion === version &&
+    Array.isArray(record.categories) &&
+    Array.isArray(record.foods) &&
+    Array.isArray(record.tags) &&
+    Array.isArray(record.history) &&
+    Array.isArray(record.favorites) &&
+    typeof record.lastUsedAt === "string"
+  );
+};
+
+const isPreviousStoredAppData = (value: unknown): value is PreviousStoredAppData => {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const record = value as Partial<PreviousStoredAppData>;
+  return (
+    record.storageVersion === 2 &&
     Array.isArray(record.categories) &&
     Array.isArray(record.foods) &&
     Array.isArray(record.tags) &&
@@ -81,8 +165,7 @@ const toFoodItem = (value: unknown): FoodItem | null => {
     isStoredRarity(value.rarity) &&
     typeof value.enabled === "boolean" &&
     typeof value.createdAt === "string" &&
-    (value.notes === undefined || typeof value.notes === "string") &&
-    (value.custom === undefined || typeof value.custom === "boolean")
+    (value.notes === undefined || typeof value.notes === "string")
   ) {
     const rarity = normalizeRarity(value.rarity);
     return {
@@ -95,7 +178,6 @@ const toFoodItem = (value: unknown): FoodItem | null => {
       enabled: value.enabled,
       notes: value.notes,
       createdAt: value.createdAt,
-      custom: value.custom,
     };
   }
 
@@ -151,29 +233,74 @@ const toHistoryEntry = (value: unknown): PickHistoryEntry | null => {
 
 const isPresent = <T>(value: T | null): value is T => value !== null;
 
-const sanitizeStoredData = (data: StoredAppData): StoredAppData => ({
-  ...data,
+const sanitizeStoredCollections = (data: {
+  categories: unknown[];
+  foods: unknown[];
+  tags: unknown[];
+  history: unknown[];
+  favorites: unknown[];
+  lastUsedAt: string;
+}): Omit<StoredAppData, "storageVersion"> => ({
   categories: data.categories.filter(isFoodCategory),
   foods: data.foods.map(toFoodItem).filter(isPresent),
   tags: data.tags.filter((tag): tag is string => typeof tag === "string" && tag.trim().length > 0),
   history: data.history.map(toHistoryEntry).filter(isPresent).slice(0, 10),
   favorites: data.favorites.filter((favorite): favorite is string => typeof favorite === "string"),
+  lastUsedAt: data.lastUsedAt,
 });
 
-const migrateLegacyData = (data: LegacyStoredAppData): StoredAppData => {
-  const customFoods = data.customFoods.map(toFoodItem).filter(isPresent);
-  const foods = [...customFoods, ...defaultFoods.map(cloneFood)];
+const sanitizeStoredData = (data: StoredAppData): StoredAppData => ({
+  storageVersion: version,
+  ...sanitizeStoredCollections(data),
+});
+
+const mergeWithCurrentDefaults = (data: Omit<StoredAppData, "storageVersion">): StoredAppData => {
+  const currentCategoryIds = new Set(defaultCategories.map((category) => category.id));
+  const currentFoodIds = new Set(defaultFoods.map((foodItem) => foodItem.id));
+  const userCategories = data.categories.filter(
+    (category) => !oldDefaultCategoryIds.has(category.id) && !currentCategoryIds.has(category.id),
+  );
+  const categories = [...defaultCategories.map(cloneCategory), ...userCategories].sort(
+    (a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, "zh-Hans-CN"),
+  );
+  const categoryIds = new Set(categories.map((category) => category.id));
+  const userFoods = data.foods.filter(
+    (foodItem) =>
+      !oldDefaultFoodIds.has(foodItem.id) &&
+      !currentFoodIds.has(foodItem.id) &&
+      categoryIds.has(foodItem.categoryId),
+  );
+  const foods = [...defaultFoods.map(cloneFood), ...userFoods];
+  const foodIds = new Set(foods.map((foodItem) => foodItem.id));
+  const userFoodTags = new Set(userFoods.flatMap((foodItem) => foodItem.tags));
+  const managedTags = data.tags.filter((tag) => !oldDefaultManagedTags.has(tag) || userFoodTags.has(tag));
+  const tags = [...new Set([...managedTags, ...createSeedTags(foods)])].sort((a, b) =>
+    a.localeCompare(b, "zh-Hans-CN"),
+  );
 
   return {
     storageVersion: version,
-    categories: defaultCategories.map(cloneCategory),
+    categories,
     foods,
-    tags: createSeedTags(foods),
-    history: data.history.map(toHistoryEntry).filter(isPresent).slice(0, 10),
-    favorites: data.favorites.filter((favorite): favorite is string => typeof favorite === "string"),
+    tags,
+    history: data.history,
+    favorites: data.favorites.filter((favorite) => foodIds.has(favorite)),
     lastUsedAt: data.lastUsedAt,
   };
 };
+
+const migratePreviousData = (data: PreviousStoredAppData): StoredAppData =>
+  mergeWithCurrentDefaults(sanitizeStoredCollections(data));
+
+const migrateLegacyData = (data: LegacyStoredAppData): StoredAppData =>
+  mergeWithCurrentDefaults(sanitizeStoredCollections({
+    categories: defaultCategories,
+    foods: data.customFoods,
+    tags: [],
+    history: data.history,
+    favorites: data.favorites,
+    lastUsedAt: data.lastUsedAt,
+  }));
 
 export const loadStoredData = (storage: Storage = window.localStorage): StoredAppData => {
   try {
@@ -185,6 +312,10 @@ export const loadStoredData = (storage: Storage = window.localStorage): StoredAp
     const parsed = JSON.parse(raw) as unknown;
     if (isStoredAppData(parsed)) {
       return sanitizeStoredData(parsed);
+    }
+
+    if (isPreviousStoredAppData(parsed)) {
+      return migratePreviousData(parsed);
     }
 
     if (isLegacyStoredAppData(parsed)) {
@@ -220,7 +351,7 @@ export const saveStoredData = (
   return payload;
 };
 
-export const upsertCustomFood = (foods: FoodItem[], food: FoodItem): FoodItem[] => {
+export const upsertFood = (foods: FoodItem[], food: FoodItem): FoodItem[] => {
   const existing = foods.findIndex((item) => item.id === food.id);
   if (existing === -1) {
     return [food, ...foods];

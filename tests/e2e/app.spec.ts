@@ -33,26 +33,29 @@ test("data management supports CRUD, search, filters, sort, and persistence", as
   const form = manager.locator(".manager-form");
   await expect(manager.getByText(/实物/)).toHaveCount(0);
   await expect(manager.getByText(/权重/)).toHaveCount(0);
+  await expect(manager.getByLabel("来源筛选")).toHaveCount(0);
+  await expect(manager.getByText("内置")).toHaveCount(0);
+  await expect(manager.getByText("自定义")).toHaveCount(0);
 
-  await form.getByLabel("名称").fill("鸡腿饭");
-  await form.getByLabel("标签").fill("米饭 想吃");
+  await form.getByLabel("名称").fill("松茸豆腐饭");
+  await form.getByLabel("标签").fill("下饭 想吃");
   await form.getByRole("button", { name: "5" }).click();
   await form.getByLabel("备注").fill("楼下能买到");
   await form.getByRole("button", { name: "保存食物" }).click();
-  await expect(manager.getByText("鸡腿饭")).toBeVisible();
+  await expect(manager.locator(".management-row").filter({ hasText: "松茸豆腐饭" })).toBeVisible();
 
-  await manager.getByPlaceholder("搜索名称、标签、备注").fill("鸡腿");
-  await expect(manager.locator(".management-row").filter({ hasText: "鸡腿饭" })).toBeVisible();
+  await manager.getByPlaceholder("搜索名称、标签、备注").fill("松茸");
+  await expect(manager.locator(".management-row").filter({ hasText: "松茸豆腐饭" })).toBeVisible();
   await manager.getByLabel("标签筛选").selectOption({ label: "想吃" });
-  await expect(manager.locator(".management-row").filter({ hasText: "鸡腿饭" })).toBeVisible();
+  await expect(manager.locator(".management-row").filter({ hasText: "松茸豆腐饭" })).toBeVisible();
   await manager.getByLabel("排序").selectOption({ label: "星级" });
   await manager.getByRole("button", { name: "升序" }).click();
   await expect(manager.getByRole("button", { name: "降序" })).toBeVisible();
 
-  await manager.getByRole("button", { name: "编辑 鸡腿饭" }).click();
-  await form.getByLabel("名称").fill("招牌鸡腿饭");
+  await manager.getByRole("button", { name: "编辑 松茸豆腐饭" }).click();
+  await form.getByLabel("名称").fill("招牌松茸豆腐饭");
   await form.getByRole("button", { name: "保存修改" }).click();
-  await expect(manager.getByText("招牌鸡腿饭")).toBeVisible();
+  await expect(manager.getByText("招牌松茸豆腐饭")).toBeVisible();
   await manager.getByPlaceholder("搜索名称、标签、备注").fill("");
 
   await manager.getByRole("button", { name: "大类" }).click();
@@ -67,34 +70,50 @@ test("data management supports CRUD, search, filters, sort, and persistence", as
   await expect(manager.getByText("粤式小炒")).toBeVisible();
 
   await manager.getByRole("button", { name: "标签" }).click();
-  await form.getByLabel("标签名称").fill("清淡");
+  await form.getByLabel("标签名称").fill("海边想吃");
   await form.getByRole("button", { name: "新增标签" }).click();
-  await expect(manager.getByText("清淡")).toBeVisible();
-  await manager.getByRole("button", { name: "编辑标签 清淡" }).click();
-  await form.getByLabel("标签名称").fill("很清淡");
+  await expect(manager.getByText("海边想吃")).toBeVisible();
+  await manager.getByRole("button", { name: "编辑标签 海边想吃" }).click();
+  await form.getByLabel("标签名称").fill("海边备选");
   await form.getByRole("button", { name: "保存标签" }).click();
-  await expect(manager.getByText("很清淡")).toBeVisible();
+  await expect(manager.getByText("海边备选")).toBeVisible();
 
   await page.reload();
   await page.getByRole("button", { name: "数据管理" }).click();
-  await expect(manager.locator(".management-row").filter({ hasText: "招牌鸡腿饭" })).toBeVisible();
+  await expect(manager.locator(".management-row").filter({ hasText: "招牌松茸豆腐饭" })).toBeVisible();
   await manager.getByRole("button", { name: "大类" }).click();
   await expect(manager.locator(".management-row").filter({ hasText: "粤式小炒" })).toBeVisible();
   await manager.getByRole("button", { name: "标签" }).click();
-  await expect(manager.locator(".management-row").filter({ hasText: "很清淡" })).toBeVisible();
+  await expect(manager.locator(".management-row").filter({ hasText: "海边备选" })).toBeVisible();
 
   await manager.getByRole("button", { name: "具体食物" }).click();
-  await manager.getByRole("button", { name: "删除 招牌鸡腿饭" }).click();
-  await expect(manager.getByText("招牌鸡腿饭")).toHaveCount(0);
+  await manager.getByRole("button", { name: "删除 招牌松茸豆腐饭" }).click();
+  await expect(manager.getByText("招牌松茸豆腐饭")).toHaveCount(0);
   await manager.getByRole("button", { name: "大类" }).click();
   await manager.getByRole("button", { name: "删除大类 粤式小炒" }).click();
   await expect(manager.getByText("粤式小炒")).toHaveCount(0);
   await manager.getByRole("button", { name: "标签" }).click();
-  await manager.getByRole("button", { name: "删除标签 很清淡" }).click();
-  await expect(manager.getByText("很清淡")).toHaveCount(0);
+  await manager.getByRole("button", { name: "删除标签 海边备选" }).click();
+  await expect(manager.getByText("海边备选")).toHaveCount(0);
 });
 
-test("new custom tags become available in wheel and gacha filters", async ({ page }) => {
+test("disabled categories are omitted from the category wheel", async ({ page }) => {
+  await page.getByRole("button", { name: "数据管理" }).click();
+  const manager = page.locator(".data-manager");
+  const form = manager.locator(".manager-form");
+
+  await manager.getByRole("button", { name: "大类" }).click();
+  await manager.getByRole("button", { name: "编辑大类 早餐早点" }).click();
+  await form.getByLabel("参与大类转盘").uncheck();
+  await form.getByRole("button", { name: "保存大类" }).click();
+
+  await page.getByRole("button", { name: "转盘" }).click();
+  await expect(page.getByTestId("wheel-marker")).toHaveCount(17);
+  await expect(page.locator('[data-testid="wheel-marker"][aria-label^="早餐早点，"]')).toHaveCount(0);
+  await expect(page.getByText("已从 17 个候选中选择")).toBeVisible();
+});
+
+test("new tags become available in wheel and gacha filters", async ({ page }) => {
   await page.getByRole("button", { name: "数据管理" }).click();
   const form = page.locator(".manager-form");
 
@@ -108,19 +127,19 @@ test("new custom tags become available in wheel and gacha filters", async ({ pag
 
 test("wheel keeps segment names out of the spinning disc and previews names on marker click", async ({ page }) => {
   const markers = page.getByTestId("wheel-marker");
-  const safeMarker = page.locator('[data-testid="wheel-marker"][aria-label^="日料韩料，"]');
+  const safeMarker = page.locator('[data-testid="wheel-marker"][aria-label^="日韩料理，"]');
 
-  await expect(markers).toHaveCount(10);
+  await expect(markers).toHaveCount(18);
   await expect(page.getByText("当前色块")).toHaveCount(0);
   await expect(safeMarker).toHaveCount(1);
-  await expect(safeMarker).toHaveAccessibleName(/日料韩料/);
+  await expect(safeMarker).toHaveAccessibleName(/日韩料理/);
 
   for (const marker of await markers.all()) {
     await expect(marker).toHaveText("");
   }
 
   await safeMarker.click();
-  await expect(page.getByTestId("wheel-selected-name")).toContainText("日料韩料");
+  await expect(page.getByTestId("wheel-selected-name")).toContainText("日韩料理");
   await expect(page.getByText("点选的候选")).toBeVisible();
 
   await page.getByRole("button", { name: /开始转动/ }).click();
@@ -203,7 +222,6 @@ test("wheel markers stay centered in their slices and scale down for dense pools
     weight: 50,
     rarity: 3,
     enabled: true,
-    custom: true,
     createdAt: "2026-06-30T00:00:00.000Z",
   }));
 
@@ -212,7 +230,7 @@ test("wheel markers stay centered in their slices and scale down for dense pools
       window.localStorage.setItem(
         "what-to-eat-gacha:v1",
         JSON.stringify({
-          storageVersion: 2,
+          storageVersion: 3,
           categories,
           foods,
           tags: ["密集"],

@@ -15,19 +15,19 @@ describe("filterFoods", () => {
       selectedCategoryIds: ["fast"],
     });
 
-    expect(results.map((food) => food.id)).toContain("mcdonalds");
+    expect(results.map((food) => food.id)).toContain("fried-chicken-leg-set");
     expect(results.every((food) => food.categoryId === "fast")).toBe(true);
   });
 
   it("includes matching tags and excludes blocked tags", () => {
     const results = filterFoods(defaultFoods, {
       ...emptyFilterState,
-      includedTags: ["米饭"],
-      excludedTags: ["辣"],
+      includedTags: ["下饭"],
+      excludedTags: ["麻辣"],
     });
 
     expect(results.length).toBeGreaterThan(0);
-    expect(results.every((food) => food.tags.includes("米饭"))).toBe(true);
-    expect(results.every((food) => !food.tags.includes("辣"))).toBe(true);
+    expect(results.every((food) => food.tags.includes("下饭"))).toBe(true);
+    expect(results.every((food) => !food.tags.includes("麻辣"))).toBe(true);
   });
 });

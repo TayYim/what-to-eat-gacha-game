@@ -19,7 +19,6 @@ export interface FoodItem {
   enabled: boolean;
   notes?: string;
   createdAt: string;
-  custom?: boolean;
 }
 
 export interface FoodFilterState {
@@ -41,6 +40,16 @@ export interface PickHistoryEntry {
 }
 
 export interface StoredAppData {
+  storageVersion: 3;
+  categories: FoodCategory[];
+  foods: FoodItem[];
+  tags: string[];
+  history: PickHistoryEntry[];
+  favorites: string[];
+  lastUsedAt: string;
+}
+
+export interface PreviousStoredAppData {
   storageVersion: 2;
   categories: FoodCategory[];
   foods: FoodItem[];
@@ -52,7 +61,7 @@ export interface StoredAppData {
 
 export interface LegacyStoredAppData {
   storageVersion: 1;
-  customFoods: FoodItem[];
+  customFoods: unknown[];
   history: PickHistoryEntry[];
   favorites: string[];
   lastUsedAt: string;

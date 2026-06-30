@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Database, ShieldCheck, Sparkles } from "lucide-react";
 import { emptyFilterState, filterFoods, getAllTags } from "./domain/filters";
-import { addHistoryEntry, loadStoredData, saveStoredData, upsertCustomFood } from "./domain/storage";
+import { addHistoryEntry, loadStoredData, saveStoredData, upsertFood as upsertFoodItem } from "./domain/storage";
 import { pickUniform, pickWeightedFood } from "./domain/random";
 import type { DrawResult, FoodCategory, FoodFilterState, FoodItem, PickHistoryEntry } from "./domain/types";
 import { DataManager } from "./components/DataManager";
@@ -187,7 +187,7 @@ function App() {
   };
 
   const upsertFood = (food: FoodItem) => {
-    setFoods((current) => upsertCustomFood(current, food));
+    setFoods((current) => upsertFoodItem(current, food));
     setManagedTags((current) => [...new Set([...current, ...food.tags])]);
   };
 

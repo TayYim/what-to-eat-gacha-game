@@ -51,13 +51,15 @@ export function WheelStage({
 
   const entries = useMemo<WheelEntry[]>(() => {
     if (wheelMode === "category") {
-      return categories.map((category) => ({
-        id: category.id,
-        label: category.name,
-        color: category.color,
-        icon: category.icon,
-        meta: "大类候选",
-      }));
+      return categories
+        .filter((category) => category.enabled)
+        .map((category) => ({
+          id: category.id,
+          label: category.name,
+          color: category.color,
+          icon: category.icon,
+          meta: "大类候选",
+        }));
     }
 
     return foods.map((food) => {

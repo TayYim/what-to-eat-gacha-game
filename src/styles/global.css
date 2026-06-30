@@ -1226,8 +1226,7 @@ svg {
 }
 
 .filter-group,
-.food-form,
-.custom-list {
+.food-form {
   position: relative;
   z-index: 1;
 }
@@ -1346,15 +1345,6 @@ svg {
 .form-submit {
   align-self: end;
   min-height: 42px;
-}
-
-.custom-list {
-  display: grid;
-  gap: 8px;
-  margin-top: 14px;
-  max-height: 265px;
-  overflow: auto;
-  padding-right: 4px;
 }
 
 .food-row {
@@ -1682,24 +1672,6 @@ svg {
   justify-items: end;
   gap: 5px;
   align-self: center;
-}
-
-.source-chip {
-  display: inline-flex;
-  min-height: 26px;
-  align-items: center;
-  padding: 0 8px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 7px;
-  color: var(--text-muted);
-  background: rgba(255, 255, 255, 0.04);
-  font-size: 0.78rem;
-}
-
-.source-chip.is-custom {
-  color: #061018;
-  border-color: rgba(183, 255, 42, 0.8);
-  background: var(--lime);
 }
 
 .row-actions {

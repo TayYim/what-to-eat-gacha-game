@@ -7,7 +7,6 @@ import { CategoryIcon } from "./CategoryIcon";
 import { RarityStars } from "./RarityStars";
 
 type DataView = "foods" | "categories" | "tags";
-type FoodSourceFilter = "all" | "custom" | "seed";
 type SortKey = "name" | "category" | "rarity" | "createdAt" | "sortOrder" | "usage";
 
 interface DataManagerProps {
@@ -91,7 +90,6 @@ export function DataManager({
   const [query, setQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [tagFilter, setTagFilter] = useState("all");
-  const [sourceFilter, setSourceFilter] = useState<FoodSourceFilter>("all");
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [editingFoodId, setEditingFoodId] = useState<string | null>(null);
@@ -154,8 +152,6 @@ export function DataManager({
         if (normalizedQuery && !haystack.includes(normalizedQuery)) return false;
         if (categoryFilter !== "all" && food.categoryId !== categoryFilter) return false;
         if (tagFilter !== "all" && !food.tags.includes(tagFilter)) return false;
-        if (sourceFilter === "custom" && !food.custom) return false;
-        if (sourceFilter === "seed" && food.custom) return false;
         return true;
       })
       .sort((a, b) => {
@@ -172,7 +168,7 @@ export function DataManager({
         if (activeSortKey === "createdAt") return (new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()) * sortFactor;
         return a.name.localeCompare(b.name, "zh-Hans-CN") * sortFactor;
       });
-  }, [activeSortKey, categoryById, categoryFilter, foods, normalizedQuery, sortFactor, sourceFilter, tagFilter]);
+  }, [activeSortKey, categoryById, categoryFilter, foods, normalizedQuery, sortFactor, tagFilter]);
 
   const visibleCategories = useMemo(() => {
     return categories
@@ -232,7 +228,6 @@ export function DataManager({
       enabled: foodDraft.enabled,
       notes: foodDraft.notes.trim() || undefined,
       createdAt: existing?.createdAt ?? new Date().toISOString(),
-      custom: true,
     });
     resetFoodForm();
   };
@@ -360,14 +355,6 @@ export function DataManager({
                 ))}
               </select>
             </label>
-            <label>
-              来源筛选
-              <select value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value as FoodSourceFilter)}>
-                <option value="all">全部来源</option>
-                <option value="custom">自定义</option>
-                <option value="seed">内置</option>
-              </select>
-            </label>
           </>
         )}
 
@@ -461,7 +448,6 @@ export function DataManager({
                   </div>
                   <div className="row-metrics">
                     <RarityStars rarity={food.rarity} size="sm" />
-                    <span className={`source-chip ${food.custom ? "is-custom" : ""}`}>{food.custom ? "自定义" : "内置"}</span>
                   </div>
                   <div className="row-actions">
                     <button type="button" className="icon-action" aria-label={`编辑 ${food.name}`} onClick={() => editFood(food)}><Edit3 aria-hidden="true" /></button>
