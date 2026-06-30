@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { defaultCategories, defaultFoods } from "../data/seed";
+import { getRarityWeight } from "./random";
 import { createEmptyStoredData, loadStoredData, saveStoredData } from "./storage";
 
 const throwingStorage = {
@@ -62,6 +63,78 @@ describe("storage fallbacks", () => {
       history: [],
       favorites: [],
     });
+  });
+
+  it("creates seed data with only 3, 4, and 5 star rarity-derived weights", () => {
+    const loaded = createEmptyStoredData();
+
+    expect(new Set(loaded.foods.map((food) => food.rarity))).toEqual(new Set([3, 4, 5]));
+    expect(loaded.foods.every((food) => food.weight === getRarityWeight(food.rarity))).toBe(true);
+  });
+
+  it("normalizes persisted food rarity and weight to the current hidden defaults", () => {
+    const storage = new Map<string, string>();
+    const fakeStorage = {
+      getItem(key: string) {
+        return storage.get(key) ?? null;
+      },
+      setItem(key: string, value: string) {
+        storage.set(key, value);
+      },
+      removeItem(key: string) {
+        storage.delete(key);
+      },
+      clear() {
+        storage.clear();
+      },
+      key() {
+        return null;
+      },
+      length: 1,
+    } satisfies Storage;
+
+    fakeStorage.setItem(
+      "what-to-eat-gacha:v1",
+      JSON.stringify({
+        storageVersion: 2,
+        categories: defaultCategories,
+        foods: [
+          {
+            id: "old-low",
+            name: "旧低星",
+            categoryId: "rice",
+            tags: [],
+            weight: 999,
+            rarity: 2,
+            enabled: true,
+            createdAt: "2026-06-30T00:00:00.000Z",
+            custom: true,
+          },
+          {
+            id: "old-high",
+            name: "旧高星",
+            categoryId: "rice",
+            tags: [],
+            weight: 999,
+            rarity: 5,
+            enabled: true,
+            createdAt: "2026-06-30T00:00:00.000Z",
+            custom: true,
+          },
+        ],
+        tags: [],
+        history: [],
+        favorites: [],
+        lastUsedAt: "2026-06-30T00:00:00.000Z",
+      }),
+    );
+
+    const loaded = loadStoredData(fakeStorage);
+
+    expect(loaded.foods).toEqual([
+      expect.objectContaining({ id: "old-low", rarity: 3, weight: getRarityWeight(3) }),
+      expect.objectContaining({ id: "old-high", rarity: 5, weight: getRarityWeight(5) }),
+    ]);
   });
 
   it("migrates legacy custom foods while filtering invalid food and history items", () => {

@@ -47,7 +47,7 @@ export function WheelStage({
   onWheelModeChange,
   onSpin,
 }: WheelStageProps) {
-  const [previewEntryId, setPreviewEntryId] = useState<string | null>(null);
+  const [previewEntry, setPreviewEntry] = useState<{ id: string; source: "hover" | "click" } | null>(null);
 
   const entries = useMemo<WheelEntry[]>(() => {
     if (wheelMode === "category") {
@@ -56,7 +56,7 @@ export function WheelStage({
         label: category.name,
         color: category.color,
         icon: category.icon,
-        meta: "默认大类",
+        meta: "大类候选",
       }));
     }
 
@@ -68,7 +68,7 @@ export function WheelStage({
         color: category?.color ?? "#00d9ff",
         icon: category?.icon ?? "fork",
         rarity: food.rarity,
-        meta: `${category?.name ?? "未分类"} / 权重 ${food.weight}`,
+        meta: category?.name ?? "未分类",
       };
     });
   }, [categories, foods, wheelMode]);
@@ -89,19 +89,24 @@ export function WheelStage({
   }, [entries]);
 
   useEffect(() => {
-    setPreviewEntryId(null);
+    setPreviewEntry(null);
   }, [selectedEntry?.id, wheelMode]);
 
   useEffect(() => {
-    if (previewEntryId && !entries.some((entry) => entry.id === previewEntryId)) {
-      setPreviewEntryId(null);
+    if (previewEntry && !entries.some((entry) => entry.id === previewEntry.id)) {
+      setPreviewEntry(null);
     }
-  }, [entries, previewEntryId]);
+  }, [entries, previewEntry]);
 
-  const previewEntry = previewEntryId ? entries.find((entry) => entry.id === previewEntryId) ?? null : null;
+  const previewEntryItem = previewEntry ? entries.find((entry) => entry.id === previewEntry.id) ?? null : null;
   const selectedEntryInCurrentWheel =
     selectedEntry && entries.some((entry) => entry.id === selectedEntry.id) ? selectedEntry : null;
-  const displayEntry = spinning ? null : previewEntry ?? selectedEntryInCurrentWheel;
+  const displayEntry = spinning ? null : previewEntryItem ?? selectedEntryInCurrentWheel;
+  const previewLabel = previewEntry
+    ? previewEntry.source === "click"
+      ? "点选的候选"
+      : "指向的候选"
+    : "上次结果";
   const markerSize = getWheelMarkerSize(entries.length);
   const pointerSize = getWheelPointerSize(markerSize);
   const sliceAngle = entries.length > 0 ? 360 / entries.length : 360;
@@ -168,7 +173,11 @@ export function WheelStage({
                   data-testid="wheel-marker"
                   aria-label={`${entry.label}，${entry.meta}`}
                   title={entry.label}
-                  onClick={() => setPreviewEntryId(entry.id)}
+                  onMouseEnter={() => setPreviewEntry({ id: entry.id, source: "hover" })}
+                  onFocus={() => setPreviewEntry({ id: entry.id, source: "hover" })}
+                  onMouseLeave={() => setPreviewEntry((current) => (current?.source === "hover" ? null : current))}
+                  onBlur={() => setPreviewEntry((current) => (current?.source === "hover" ? null : current))}
+                  onClick={() => setPreviewEntry({ id: entry.id, source: "click" })}
                   disabled={spinning}
                   style={
                     {
@@ -190,16 +199,20 @@ export function WheelStage({
         </div>
 
         <div className="result-console">
-          <p className="console-label">上次结果</p>
-          <div className="wheel-preview" aria-live="polite">
-            <span className="wheel-preview-label">当前色块</span>
-            <strong data-testid="wheel-selected-name">
-              {spinning ? "转动中" : displayEntry ? displayEntry.label : "点击图标查看名称"}
-            </strong>
-            <span className="wheel-preview-meta">
-              {spinning ? "正在重新结算" : displayEntry ? displayEntry.meta : "转盘上仅保留图标，避免文字重叠"}
-            </span>
-          </div>
+          <p className="console-label">候选信息</p>
+          {spinning || displayEntry ? (
+            <div className="wheel-preview" aria-live="polite">
+              <span className="wheel-preview-label">{spinning ? "转盘正在转动" : previewLabel}</span>
+              <strong data-testid="wheel-selected-name">
+                {spinning ? "转动中" : displayEntry?.label}
+              </strong>
+              <span className="wheel-preview-meta">
+                {spinning ? "正在重新结算" : displayEntry?.meta}
+              </span>
+            </div>
+          ) : (
+            <p className="wheel-tip">点击转盘图标查看对应候选</p>
+          )}
           {selectedEntry ? (
             <div className="winner-card">
               <span className="winner-icon">

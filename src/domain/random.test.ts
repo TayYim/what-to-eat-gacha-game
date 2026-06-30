@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { FoodItem } from "./types";
-import { pickUniform, pickWeightedFood } from "./random";
+import { getRarityWeight, pickUniform, pickWeightedFood } from "./random";
 
 const foods: FoodItem[] = [
   {
@@ -8,8 +8,8 @@ const foods: FoodItem[] = [
     name: "A",
     categoryId: "rice",
     tags: [],
-    weight: 10,
-    rarity: 1,
+    weight: 1,
+    rarity: 3,
     enabled: true,
     createdAt: "2026-06-30T00:00:00.000Z",
   },
@@ -18,8 +18,8 @@ const foods: FoodItem[] = [
     name: "B",
     categoryId: "rice",
     tags: [],
-    weight: 30,
-    rarity: 3,
+    weight: 999,
+    rarity: 5,
     enabled: true,
     createdAt: "2026-06-30T00:00:00.000Z",
   },
@@ -36,10 +36,16 @@ const foods: FoodItem[] = [
 ];
 
 describe("pickWeightedFood", () => {
-  it("selects by cumulative enabled weights", () => {
+  it("uses gacha-style default weights derived from rarity", () => {
+    expect(getRarityWeight(3)).toBe(94);
+    expect(getRarityWeight(4)).toBe(5);
+    expect(getRarityWeight(5)).toBe(1);
+  });
+
+  it("selects by cumulative enabled rarity weights", () => {
     expect(pickWeightedFood(foods, () => 0.01)?.item.id).toBe("a");
-    expect(pickWeightedFood(foods, () => 0.26)?.item.id).toBe("b");
-    expect(pickWeightedFood(foods, () => 0.99)?.item.id).toBe("b");
+    expect(pickWeightedFood(foods, () => 0.98)?.item.id).toBe("a");
+    expect(pickWeightedFood(foods, () => 0.995)?.item.id).toBe("b");
   });
 
   it("ignores disabled items", () => {

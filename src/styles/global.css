@@ -199,8 +199,7 @@ svg {
 .filter-row-heading,
 .food-row span,
 .history-list span,
-.card-rarity,
-.weight-chip {
+.card-rarity {
   color: var(--text-muted);
 }
 
@@ -257,8 +256,7 @@ svg {
 
 .status-cluster span,
 .pool-pill,
-.gacha-meta,
-.weight-chip {
+.gacha-meta {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -580,6 +578,15 @@ svg {
   color: #ffffff;
   font-size: clamp(1rem, 1.4vw, 1.18rem);
   overflow-wrap: anywhere;
+}
+
+.wheel-tip {
+  margin: 0;
+  padding: 12px;
+  border: 1px dashed rgba(0, 217, 255, 0.26);
+  border-radius: 8px;
+  color: var(--text-muted);
+  background: rgba(0, 217, 255, 0.04);
 }
 
 .wheel-core {
@@ -1323,7 +1330,7 @@ svg {
 
 .rating-buttons {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 5px;
 }
 
@@ -1634,10 +1641,10 @@ svg {
 .management-row {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto auto;
-  align-items: center;
+  align-items: start;
   gap: 12px;
   min-width: 0;
-  min-height: 72px;
+  min-height: 96px;
   padding: 12px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 8px;
@@ -1674,6 +1681,7 @@ svg {
   display: grid;
   justify-items: end;
   gap: 5px;
+  align-self: center;
 }
 
 .source-chip {
@@ -1929,9 +1937,14 @@ svg {
     grid-template-columns: 1fr;
   }
 
-  .data-tabs,
   .manager-form {
     grid-template-columns: 1fr;
+  }
+
+  .data-tabs {
+    display: grid;
+    width: 100%;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .management-list {

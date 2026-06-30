@@ -1,6 +1,7 @@
 import { defaultCategories, defaultFoods, starterTags } from "../data/seed";
 import type { FoodCategory, FoodItem, LegacyStoredAppData, PickHistoryEntry, Rarity, StoredAppData } from "./types";
 import { getAllTags } from "./filters";
+import { getRarityWeight, normalizeRarity } from "./random";
 
 const key = "what-to-eat-gacha:v1";
 const version = 2 as const;
@@ -61,15 +62,15 @@ const isLegacyStoredAppData = (value: unknown): value is LegacyStoredAppData => 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
 
-const isRarity = (value: unknown): value is Rarity =>
+const isStoredRarity = (value: unknown): value is number =>
   typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 5;
 
-const isFoodItem = (value: unknown): value is FoodItem => {
+const toFoodItem = (value: unknown): FoodItem | null => {
   if (!isRecord(value)) {
-    return false;
+    return null;
   }
 
-  return (
+  if (
     typeof value.id === "string" &&
     typeof value.name === "string" &&
     typeof value.categoryId === "string" &&
@@ -77,12 +78,28 @@ const isFoodItem = (value: unknown): value is FoodItem => {
     value.tags.every((tag) => typeof tag === "string") &&
     typeof value.weight === "number" &&
     Number.isFinite(value.weight) &&
-    isRarity(value.rarity) &&
+    isStoredRarity(value.rarity) &&
     typeof value.enabled === "boolean" &&
     typeof value.createdAt === "string" &&
     (value.notes === undefined || typeof value.notes === "string") &&
     (value.custom === undefined || typeof value.custom === "boolean")
-  );
+  ) {
+    const rarity = normalizeRarity(value.rarity);
+    return {
+      id: value.id,
+      name: value.name,
+      categoryId: value.categoryId,
+      tags: value.tags,
+      weight: getRarityWeight(rarity),
+      rarity,
+      enabled: value.enabled,
+      notes: value.notes,
+      createdAt: value.createdAt,
+      custom: value.custom,
+    };
+  }
+
+  return null;
 };
 
 const isFoodCategory = (value: unknown): value is FoodCategory => {
@@ -101,12 +118,12 @@ const isFoodCategory = (value: unknown): value is FoodCategory => {
   );
 };
 
-const isHistoryEntry = (value: unknown): value is PickHistoryEntry => {
+const toHistoryEntry = (value: unknown): PickHistoryEntry | null => {
   if (!isRecord(value)) {
-    return false;
+    return null;
   }
 
-  return (
+  if (
     typeof value.id === "string" &&
     typeof value.label === "string" &&
     (value.mode === "category-wheel" || value.mode === "food-wheel" || value.mode === "gacha") &&
@@ -115,21 +132,36 @@ const isHistoryEntry = (value: unknown): value is PickHistoryEntry => {
     typeof value.createdAt === "string" &&
     (value.foodId === undefined || typeof value.foodId === "string") &&
     (value.categoryId === undefined || typeof value.categoryId === "string") &&
-    (value.rarity === undefined || isRarity(value.rarity))
-  );
+    (value.rarity === undefined || isStoredRarity(value.rarity))
+  ) {
+    return {
+      id: value.id,
+      foodId: value.foodId,
+      categoryId: value.categoryId,
+      label: value.label,
+      mode: value.mode,
+      poolSize: value.poolSize,
+      createdAt: value.createdAt,
+      rarity: value.rarity === undefined ? undefined : normalizeRarity(value.rarity),
+    };
+  }
+
+  return null;
 };
+
+const isPresent = <T>(value: T | null): value is T => value !== null;
 
 const sanitizeStoredData = (data: StoredAppData): StoredAppData => ({
   ...data,
   categories: data.categories.filter(isFoodCategory),
-  foods: data.foods.filter(isFoodItem),
+  foods: data.foods.map(toFoodItem).filter(isPresent),
   tags: data.tags.filter((tag): tag is string => typeof tag === "string" && tag.trim().length > 0),
-  history: data.history.filter(isHistoryEntry).slice(0, 10),
+  history: data.history.map(toHistoryEntry).filter(isPresent).slice(0, 10),
   favorites: data.favorites.filter((favorite): favorite is string => typeof favorite === "string"),
 });
 
 const migrateLegacyData = (data: LegacyStoredAppData): StoredAppData => {
-  const customFoods = data.customFoods.filter(isFoodItem);
+  const customFoods = data.customFoods.map(toFoodItem).filter(isPresent);
   const foods = [...customFoods, ...defaultFoods.map(cloneFood)];
 
   return {
@@ -137,7 +169,7 @@ const migrateLegacyData = (data: LegacyStoredAppData): StoredAppData => {
     categories: defaultCategories.map(cloneCategory),
     foods,
     tags: createSeedTags(foods),
-    history: data.history.filter(isHistoryEntry).slice(0, 10),
+    history: data.history.map(toHistoryEntry).filter(isPresent).slice(0, 10),
     favorites: data.favorites.filter((favorite): favorite is string => typeof favorite === "string"),
     lastUsedAt: data.lastUsedAt,
   };

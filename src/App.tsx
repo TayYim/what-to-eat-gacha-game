@@ -110,7 +110,7 @@ function App() {
           label: category.name,
           color: category.color,
           icon: category.icon,
-          meta: "默认大类推荐",
+          meta: "大类候选",
         });
         addHistory({
           categoryId: category.id,
@@ -128,7 +128,7 @@ function App() {
           color: category?.color ?? "#00d9ff",
           icon: category?.icon ?? "fork",
           rarity: food.rarity,
-          meta: `${category?.name ?? "未分类"} / 权重 ${food.weight}`,
+          meta: category?.name ?? "未分类",
         });
         addHistory({
           foodId: food.id,

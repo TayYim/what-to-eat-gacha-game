@@ -2,13 +2,13 @@ import { type CSSProperties, type FormEvent, useEffect, useMemo, useState } from
 import { Edit3, Plus, Search, Star, Trash2, X } from "lucide-react";
 import type { FoodCategory, FoodItem, Rarity } from "../domain/types";
 import { parseTags } from "../domain/filters";
-import { clampWeight } from "../domain/random";
+import { getRarityWeight } from "../domain/random";
 import { CategoryIcon } from "./CategoryIcon";
 import { RarityStars } from "./RarityStars";
 
 type DataView = "foods" | "categories" | "tags";
 type FoodSourceFilter = "all" | "custom" | "seed";
-type SortKey = "name" | "category" | "rarity" | "weight" | "createdAt" | "sortOrder" | "usage";
+type SortKey = "name" | "category" | "rarity" | "createdAt" | "sortOrder" | "usage";
 
 interface DataManagerProps {
   categories: FoodCategory[];
@@ -30,7 +30,6 @@ interface FoodDraft {
   name: string;
   categoryId: string;
   tags: string;
-  weight: number;
   rarity: Rarity;
   notes: string;
   enabled: boolean;
@@ -58,7 +57,6 @@ const emptyFoodDraft = (categoryId: string): FoodDraft => ({
   name: "",
   categoryId,
   tags: "",
-  weight: 50,
   rarity: 3,
   notes: "",
   enabled: true,
@@ -118,7 +116,6 @@ export function DataManager({
         { value: "name", label: "名称" },
         { value: "category", label: "大类" },
         { value: "rarity", label: "星级" },
-        { value: "weight", label: "权重" },
         { value: "createdAt", label: "创建时间" },
       ] satisfies { value: SortKey; label: string }[];
     }
@@ -127,7 +124,7 @@ export function DataManager({
       return [
         { value: "sortOrder", label: "顺序" },
         { value: "name", label: "名称" },
-        { value: "usage", label: "实物数量" },
+        { value: "usage", label: "食物数量" },
       ] satisfies { value: SortKey; label: string }[];
     }
 
@@ -172,7 +169,6 @@ export function DataManager({
         }
 
         if (activeSortKey === "rarity") return ((a.rarity - b.rarity) || a.name.localeCompare(b.name, "zh-Hans-CN")) * sortFactor;
-        if (activeSortKey === "weight") return ((a.weight - b.weight) || a.name.localeCompare(b.name, "zh-Hans-CN")) * sortFactor;
         if (activeSortKey === "createdAt") return (new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()) * sortFactor;
         return a.name.localeCompare(b.name, "zh-Hans-CN") * sortFactor;
       });
@@ -231,7 +227,7 @@ export function DataManager({
       name,
       categoryId: foodDraft.categoryId,
       tags: parseTags(foodDraft.tags),
-      weight: clampWeight(foodDraft.weight),
+      weight: getRarityWeight(foodDraft.rarity),
       rarity: foodDraft.rarity,
       enabled: foodDraft.enabled,
       notes: foodDraft.notes.trim() || undefined,
@@ -277,7 +273,6 @@ export function DataManager({
       name: food.name,
       categoryId: food.categoryId,
       tags: food.tags.join(" "),
-      weight: food.weight,
       rarity: food.rarity,
       notes: food.notes ?? "",
       enabled: food.enabled,
@@ -307,19 +302,19 @@ export function DataManager({
       <div className="stage-heading data-heading">
         <div>
           <p className="eyebrow">数据管理</p>
-          <h2 id="data-manager-title">管理大类、标签和具体实物</h2>
+          <h2 id="data-manager-title">管理大类、标签和具体食物</h2>
         </div>
         <div className="data-summary" aria-label="数据概览">
           <span><strong>{categories.length}</strong>大类</span>
           <span><strong>{tags.length}</strong>标签</span>
-          <span><strong>{foods.length}</strong>实物</span>
+          <span><strong>{foods.length}</strong>食物</span>
           <span><strong>{filteredCount}</strong>当前候选</span>
         </div>
       </div>
 
       <div className="data-tabs" aria-label="管理对象">
         {[
-          { value: "foods", label: "具体实物" },
+          { value: "foods", label: "具体食物" },
           { value: "categories", label: "大类" },
           { value: "tags", label: "标签" },
         ].map((tab) => (
@@ -399,7 +394,7 @@ export function DataManager({
           {view === "foods" && (
             <form className="manager-form" onSubmit={submitFood}>
               <div className="editor-title">
-                <h3>{editingFoodId ? "编辑具体实物" : "新增具体实物"}</h3>
+                <h3>{editingFoodId ? "编辑具体食物" : "新增具体食物"}</h3>
                 {editingFoodId && <button type="button" className="ghost-action" onClick={resetFoodForm}>取消编辑</button>}
               </div>
               <label>名称<input value={foodDraft.name} onChange={(event) => setFoodDraft((current) => ({ ...current, name: event.target.value }))} placeholder="例如：番茄牛腩饭" /></label>
@@ -410,18 +405,17 @@ export function DataManager({
                 </select>
               </label>
               <label className="wide">标签<input value={foodDraft.tags} onChange={(event) => setFoodDraft((current) => ({ ...current, tags: event.target.value }))} placeholder="用逗号、顿号或空格分隔" /></label>
-              <label>权重<input type="number" min="1" max="999" value={foodDraft.weight} onChange={(event) => setFoodDraft((current) => ({ ...current, weight: Number(event.target.value) }))} /></label>
               <fieldset>
                 <legend>星级</legend>
                 <div className="rating-buttons">
-                  {([1, 2, 3, 4, 5] as Rarity[]).map((level) => (
+                  {([3, 4, 5] as Rarity[]).map((level) => (
                     <button key={level} type="button" className={foodDraft.rarity === level ? "is-active" : ""} aria-pressed={foodDraft.rarity === level} onClick={() => setFoodDraft((current) => ({ ...current, rarity: level }))}>{level}</button>
                   ))}
                 </div>
               </fieldset>
               <label className="wide">备注<input value={foodDraft.notes} onChange={(event) => setFoodDraft((current) => ({ ...current, notes: event.target.value }))} placeholder="可选" /></label>
               <label className="toggle-row"><input type="checkbox" checked={foodDraft.enabled} onChange={(event) => setFoodDraft((current) => ({ ...current, enabled: event.target.checked }))} />参与随机</label>
-              <button type="submit" className="primary-action form-submit" disabled={categories.length === 0}><Plus aria-hidden="true" />{editingFoodId ? "保存修改" : "保存实物"}</button>
+              <button type="submit" className="primary-action form-submit" disabled={categories.length === 0}><Plus aria-hidden="true" />{editingFoodId ? "保存修改" : "保存食物"}</button>
             </form>
           )}
 
@@ -454,7 +448,7 @@ export function DataManager({
 
         <div className="management-list" aria-live="polite">
           {view === "foods" && (
-            visibleFoods.length === 0 ? <p className="empty-result">没有符合条件的实物。</p> : visibleFoods.map((food) => {
+            visibleFoods.length === 0 ? <p className="empty-result">没有符合条件的食物。</p> : visibleFoods.map((food) => {
               const category = categoryById.get(food.categoryId);
               const isFavorite = favorites.includes(food.id);
               return (
@@ -466,7 +460,6 @@ export function DataManager({
                     {food.notes && <span>{food.notes}</span>}
                   </div>
                   <div className="row-metrics">
-                    <span className="weight-chip">权重 {food.weight}</span>
                     <RarityStars rarity={food.rarity} size="sm" />
                     <span className={`source-chip ${food.custom ? "is-custom" : ""}`}>{food.custom ? "自定义" : "内置"}</span>
                   </div>
@@ -487,7 +480,7 @@ export function DataManager({
                   <span className="category-swatch" style={{ "--category-color": category.color } as CSSProperties}><CategoryIcon icon={category.icon} /></span>
                   <div className="row-main">
                     <strong>{category.name}</strong>
-                    <span>顺序 {category.sortOrder} / {count} 个实物 / {category.enabled ? "参与转盘" : "已停用"}</span>
+                    <span>顺序 {category.sortOrder} / {count} 个食物 / {category.enabled ? "参与转盘" : "已停用"}</span>
                   </div>
                   <div className="row-actions">
                     <button type="button" className="icon-action" aria-label={`编辑大类 ${category.name}`} onClick={() => editCategory(category)}><Edit3 aria-hidden="true" /></button>
@@ -503,7 +496,7 @@ export function DataManager({
               <article key={tag} className="management-row tag-row">
                 <div className="row-main">
                   <strong>{tag}</strong>
-                  <span>{tagUsage.get(tag) ?? 0} 个实物使用</span>
+                  <span>{tagUsage.get(tag) ?? 0} 个食物使用</span>
                 </div>
                 <div className="row-actions">
                   <button type="button" className="icon-action" aria-label={`编辑标签 ${tag}`} onClick={() => editTag(tag)}><Edit3 aria-hidden="true" /></button>

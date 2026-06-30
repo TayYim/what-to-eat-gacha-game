@@ -11,7 +11,7 @@ test("roulette and gacha flows work without inline add-food controls", async ({ 
   await expect(page.getByRole("heading", { name: "今天吃啥 Gacha" })).toBeVisible();
   await expect(page.getByText("本地保存")).toBeVisible();
   await expect(page.getByRole("tab")).toHaveCount(0);
-  await expect(page.getByRole("button", { name: /保存实物|保存食物/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "保存食物" })).toHaveCount(0);
 
   await page.getByRole("button", { name: /开始转动/ }).click();
   await expect(page.locator(".winner-card strong")).toBeVisible({ timeout: 3_500 });
@@ -19,31 +19,33 @@ test("roulette and gacha flows work without inline add-food controls", async ({ 
   await expect(page.locator(".history-list li").first()).toContainText(/大类转盘/);
 
   await page.getByRole("button", { name: "抽卡" }).click();
-  await expect(page.getByRole("button", { name: /保存实物|保存食物/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "保存食物" })).toHaveCount(0);
   await page.getByRole("button", { name: "单抽" }).click();
   await expect(page.getByTestId("result-status")).toContainText("抽卡", { timeout: 4_000 });
+  await expect(page.getByText(/权重/)).toHaveCount(0);
 });
 
 test("data management supports CRUD, search, filters, sort, and persistence", async ({ page }) => {
   await page.getByRole("button", { name: "数据管理" }).click();
-  await expect(page.getByRole("heading", { name: "管理大类、标签和具体实物" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "管理大类、标签和具体食物" })).toBeVisible();
 
   const manager = page.locator(".data-manager");
   const form = manager.locator(".manager-form");
+  await expect(manager.getByText(/实物/)).toHaveCount(0);
+  await expect(manager.getByText(/权重/)).toHaveCount(0);
 
   await form.getByLabel("名称").fill("鸡腿饭");
   await form.getByLabel("标签").fill("米饭 想吃");
-  await form.getByLabel("权重").fill("88");
   await form.getByRole("button", { name: "5" }).click();
   await form.getByLabel("备注").fill("楼下能买到");
-  await form.getByRole("button", { name: "保存实物" }).click();
+  await form.getByRole("button", { name: "保存食物" }).click();
   await expect(manager.getByText("鸡腿饭")).toBeVisible();
 
   await manager.getByPlaceholder("搜索名称、标签、备注").fill("鸡腿");
   await expect(manager.locator(".management-row").filter({ hasText: "鸡腿饭" })).toBeVisible();
   await manager.getByLabel("标签筛选").selectOption({ label: "想吃" });
   await expect(manager.locator(".management-row").filter({ hasText: "鸡腿饭" })).toBeVisible();
-  await manager.getByLabel("排序").selectOption({ label: "权重" });
+  await manager.getByLabel("排序").selectOption({ label: "星级" });
   await manager.getByRole("button", { name: "升序" }).click();
   await expect(manager.getByRole("button", { name: "降序" })).toBeVisible();
 
@@ -81,7 +83,7 @@ test("data management supports CRUD, search, filters, sort, and persistence", as
   await manager.getByRole("button", { name: "标签" }).click();
   await expect(manager.locator(".management-row").filter({ hasText: "很清淡" })).toBeVisible();
 
-  await manager.getByRole("button", { name: "具体实物" }).click();
+  await manager.getByRole("button", { name: "具体食物" }).click();
   await manager.getByRole("button", { name: "删除 招牌鸡腿饭" }).click();
   await expect(manager.getByText("招牌鸡腿饭")).toHaveCount(0);
   await manager.getByRole("button", { name: "大类" }).click();
@@ -98,7 +100,7 @@ test("new custom tags become available in wheel and gacha filters", async ({ pag
 
   await form.getByLabel("名称").fill("番茄牛腩饭");
   await form.getByLabel("标签").fill("番茄牛腩 独家标签");
-  await form.getByRole("button", { name: "保存实物" }).click();
+  await form.getByRole("button", { name: "保存食物" }).click();
 
   await page.getByRole("button", { name: "转盘" }).click();
   await expect(page.getByRole("button", { name: "独家标签" })).toBeVisible();
@@ -109,6 +111,7 @@ test("wheel keeps segment names out of the spinning disc and previews names on m
   const safeMarker = page.locator('[data-testid="wheel-marker"][aria-label^="日料韩料，"]');
 
   await expect(markers).toHaveCount(10);
+  await expect(page.getByText("当前色块")).toHaveCount(0);
   await expect(safeMarker).toHaveCount(1);
   await expect(safeMarker).toHaveAccessibleName(/日料韩料/);
 
@@ -118,6 +121,7 @@ test("wheel keeps segment names out of the spinning disc and previews names on m
 
   await safeMarker.click();
   await expect(page.getByTestId("wheel-selected-name")).toContainText("日料韩料");
+  await expect(page.getByText("点选的候选")).toBeVisible();
 
   await page.getByRole("button", { name: /开始转动/ }).click();
   await expect(page.locator(".wheel-shell")).toHaveClass(/is-spinning/);
@@ -128,6 +132,61 @@ test("wheel keeps segment names out of the spinning disc and previews names on m
 
   await expect(page.locator(".winner-card strong")).toBeVisible({ timeout: 3_500 });
   await expect(page.getByTestId("wheel-selected-name")).toBeVisible();
+});
+
+test("data management rows keep visible controls inside row boundaries", async ({ page }) => {
+  await page.getByRole("button", { name: "数据管理" }).click();
+  await expect(page.getByRole("heading", { name: "管理大类、标签和具体食物" })).toBeVisible();
+
+  const issues = await page.locator(".management-list").evaluate((list) => {
+    const rows = Array.from(list.querySelectorAll(".management-row"));
+    return rows.flatMap((row, rowIndex) => {
+      const rowRect = row.getBoundingClientRect();
+      return Array.from(row.querySelectorAll(".favorite-toggle, .row-main, .row-metrics, .row-actions"))
+        .map((element) => {
+          const rect = element.getBoundingClientRect();
+          const outside =
+            rect.top < rowRect.top - 1 ||
+            rect.bottom > rowRect.bottom + 1 ||
+            rect.left < rowRect.left - 1 ||
+            rect.right > rowRect.right + 1;
+
+          return outside
+            ? {
+                rowIndex,
+                className: element.className,
+                rowTop: rowRect.top,
+                rowBottom: rowRect.bottom,
+                top: rect.top,
+                bottom: rect.bottom,
+              }
+            : null;
+        })
+        .filter(Boolean);
+    });
+  });
+
+  expect(issues).toEqual([]);
+});
+
+test("data management tabs stay usable on mobile", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole("button", { name: "数据管理" }).click();
+
+  const geometry = await page.locator(".data-tabs").evaluate((tabs) => {
+    const tabRect = tabs.getBoundingClientRect();
+    const buttonRects = Array.from(tabs.querySelectorAll("button")).map((button) => button.getBoundingClientRect());
+    return {
+      tabWidth: tabRect.width,
+      parentWidth: tabs.parentElement?.getBoundingClientRect().width ?? 0,
+      buttonTops: buttonRects.map((rect) => Math.round(rect.top)),
+      minButtonWidth: Math.min(...buttonRects.map((rect) => rect.width)),
+    };
+  });
+
+  expect(geometry.tabWidth).toBeGreaterThan(geometry.parentWidth * 0.9);
+  expect(new Set(geometry.buttonTops).size).toBe(1);
+  expect(geometry.minButtonWidth).toBeGreaterThan(90);
 });
 
 test("wheel markers stay centered in their slices and scale down for dense pools", async ({ page }) => {

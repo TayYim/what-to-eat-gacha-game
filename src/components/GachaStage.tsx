@@ -1,5 +1,6 @@
 import { Sparkles, Ticket, Zap } from "lucide-react";
 import type { DrawResult, FoodCategory, FoodItem } from "../domain/types";
+import { normalizeWeight } from "../domain/random";
 import { CategoryIcon } from "./CategoryIcon";
 import { RarityStars } from "./RarityStars";
 
@@ -27,11 +28,11 @@ export function GachaStage({
   onDrawOne,
   onDrawTen,
 }: GachaStageProps) {
-  const featured = [...foods].sort((a, b) => b.rarity - a.rarity || b.weight - a.weight).slice(0, 5);
+  const featured = [...foods].sort((a, b) => b.rarity - a.rarity || a.name.localeCompare(b.name, "zh-Hans-CN")).slice(0, 5);
   const visibleDraws = lastDraws.length > 0 ? lastDraws : featured.map((item) => ({
     item,
     randomValue: 0,
-    totalWeight: foods.reduce((sum, food) => sum + food.weight, 0),
+    totalWeight: foods.reduce((sum, food) => sum + normalizeWeight(food), 0),
     poolSize: foods.length,
   }));
 
@@ -69,7 +70,6 @@ export function GachaStage({
                 <h3>{draw.item.name}</h3>
                 <p>{category?.name ?? "未分类"}</p>
                 <RarityStars rarity={draw.item.rarity} />
-                <span className="weight-chip">权重 {draw.item.weight}</span>
               </article>
             );
           })}

@@ -1,6 +1,13 @@
 import type { DrawResult, FoodItem } from "./types";
+import type { Rarity } from "./types";
 
 export type RandomSource = () => number;
+
+const rarityWeights: Record<Rarity, number> = {
+  3: 94,
+  4: 5,
+  5: 1,
+};
 
 export const clampWeight = (weight: number): number => {
   if (!Number.isFinite(weight)) {
@@ -10,12 +17,30 @@ export const clampWeight = (weight: number): number => {
   return Math.max(1, Math.min(999, Math.round(weight)));
 };
 
-export const normalizeWeight = (item: Pick<FoodItem, "weight" | "enabled">): number => {
+export const normalizeRarity = (rarity: unknown): Rarity => {
+  if (typeof rarity !== "number" || !Number.isFinite(rarity)) {
+    return 3;
+  }
+
+  if (rarity >= 5) {
+    return 5;
+  }
+
+  if (rarity >= 4) {
+    return 4;
+  }
+
+  return 3;
+};
+
+export const getRarityWeight = (rarity: Rarity | number): number => rarityWeights[normalizeRarity(rarity)];
+
+export const normalizeWeight = (item: Pick<FoodItem, "rarity" | "enabled">): number => {
   if (!item.enabled) {
     return 0;
   }
 
-  return clampWeight(item.weight);
+  return getRarityWeight(item.rarity);
 };
 
 export const pickWeightedFood = (

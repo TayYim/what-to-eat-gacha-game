@@ -1,4 +1,4 @@
-export type Rarity = 1 | 2 | 3 | 4 | 5;
+export type Rarity = 3 | 4 | 5;
 
 export interface FoodCategory {
   id: string;
