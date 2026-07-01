@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
-import { CATEGORIES, FOODS, rarityWeight } from "./data/food-data";
-import type { Category, Food, Rarity } from "./data/food-data";
+import { ArrowLeft, Clock3, Database, Menu } from "lucide-react";
+import { rarityWeight } from "./data/food-data";
+import type { Category as GameCategory, Food as GameFood, Rarity } from "./data/food-data";
+import { DataManager } from "./components/DataManager";
 import {
   activePool,
   bestDraw,
@@ -16,7 +18,11 @@ import {
   stars as starFlags,
 } from "./domain/gacha";
 import type { GlyphData } from "./domain/gacha";
+import { getAllTags } from "./domain/filters";
+import { addHistoryEntry, loadStoredData, saveStoredData, upsertFood as upsertFoodItem } from "./domain/storage";
+import type { FoodCategory, FoodItem, PickHistoryEntry } from "./domain/types";
 
+type Page = "play" | "history" | "data";
 type Mode = "gacha" | "wheel";
 type WheelMode = "category" | "food";
 type Phase = "idle" | "summoning" | "revealing";
@@ -28,7 +34,7 @@ interface AppProps {
 }
 
 interface Draw {
-  item: Food;
+  item: GameFood;
 }
 
 interface WheelEntry {
@@ -63,8 +69,40 @@ const ACCENT_OPTIONS = ["#b89cff", "#ffce6b", "#ff9ecf", "#7fe0d4"];
 const glyphDataCache = new Map<string, GlyphData>();
 
 const createHistoryId = () => `destiny-${Date.now()}-${Math.round(Math.random() * 100000)}`;
+const createDataHistoryId = () => `pick-${Date.now()}-${Math.round(Math.random() * 100000)}`;
 
 const clampParticleDensity = (value: number) => Math.max(0.3, Math.min(2, Math.round(value * 10) / 10));
+
+const pageFromHash = (): Page => {
+  if (typeof window === "undefined") {
+    return "play";
+  }
+
+  if (window.location.hash === "#/history") {
+    return "history";
+  }
+
+  if (window.location.hash === "#/data") {
+    return "data";
+  }
+
+  return "play";
+};
+
+const pageHash = (page: Page) => (page === "play" ? "" : `#/${page}`);
+
+const toGameCategory = (category: FoodCategory): GameCategory => ({
+  id: category.id,
+  name: category.name,
+  color: category.color,
+});
+
+const toGameFood = (food: FoodItem): GameFood => ({
+  id: food.id,
+  name: food.name,
+  cat: food.categoryId,
+  r: food.rarity,
+});
 
 const loadHistory = (): HistoryEntry[] => {
   try {
@@ -278,12 +316,20 @@ function App({
   tenPullGuarantee: initialTenPullGuarantee = true,
   particleDensity: initialParticleDensity = 1,
 }: AppProps) {
+  const stored = useMemo(() => loadStoredData(), []);
+  const [page, setPage] = useState<Page>(pageFromHash);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [categories, setCategories] = useState<FoodCategory[]>(stored.categories);
+  const [foods, setFoods] = useState<FoodItem[]>(stored.foods);
+  const [managedTags, setManagedTags] = useState<string[]>(stored.tags);
+  const [dataHistory, setDataHistory] = useState<PickHistoryEntry[]>(stored.history);
+  const [favorites, setFavorites] = useState<string[]>(stored.favorites);
   const [accent, setAccent] = useState(initialAccent);
   const [tenPullGuarantee, setTenPullGuarantee] = useState(initialTenPullGuarantee);
   const [particleDensity, setParticleDensity] = useState(() => clampParticleDensity(initialParticleDensity));
   const [mode, setMode] = useState<Mode>("gacha");
   const [wheelMode, setWheelMode] = useState<WheelMode>("category");
-  const [active, setActive] = useState(() => createActiveMap(CATEGORIES));
+  const [active, setActive] = useState(() => createActiveMap(stored.categories.map(toGameCategory)));
   const [rotation, setRotation] = useState(0);
   const [spinning, setSpinning] = useState(false);
   const [wheelResult, setWheelResult] = useState<WheelResult | null>(null);
@@ -294,7 +340,6 @@ function App({
   const [flash, setFlash] = useState<string | null>(null);
   const [lastDraws, setLastDraws] = useState<Draw[] | null>(null);
   const [history, setHistory] = useState<HistoryEntry[]>(loadHistory);
-  const [showHistory, setShowHistory] = useState(false);
   const summonTimersRef = useRef<number[]>([]);
   const wheelTimerRef = useRef<number | null>(null);
   const committedRef = useRef(false);
@@ -304,11 +349,20 @@ function App({
   const flashDelay = reducedMotion ? 1 : 700;
   const wheelDelay = reducedMotion ? 1 : 1750;
 
-  const categoryMap = useMemo(() => new Map(CATEGORIES.map((category) => [category.id, category])), []);
-  const pool = useMemo(() => activePool(FOODS, active), [active]);
+  const gameCategories = useMemo(() => categories.map(toGameCategory), [categories]);
+  const gameFoods = useMemo(() => {
+    const categoryIds = new Set(categories.map((category) => category.id));
+    return foods.filter((food) => food.enabled && categoryIds.has(food.categoryId)).map(toGameFood);
+  }, [categories, foods]);
+  const tags = useMemo(() => {
+    const merged = new Set([...managedTags, ...getAllTags(foods)]);
+    return [...merged].sort((a, b) => a.localeCompare(b, "zh-Hans-CN"));
+  }, [foods, managedTags]);
+  const categoryMap = useMemo(() => new Map(gameCategories.map((category) => [category.id, category])), [gameCategories]);
+  const pool = useMemo(() => activePool(gameFoods, active), [active, gameFoods]);
   const wheelEntries = useMemo<WheelEntry[]>(() => {
     if (wheelMode === "category") {
-      return CATEGORIES.filter((category) => active[category.id] !== false).map((category) => ({
+      return categories.filter((category) => category.enabled && active[category.id] !== false).map((category) => ({
         id: category.id,
         label: category.name,
         color: category.color,
@@ -316,7 +370,7 @@ function App({
     }
 
     return pool.map((food) => {
-      const category = categoryById(CATEGORIES, food.cat);
+      const category = categoryById(gameCategories, food.cat);
       return {
         id: food.id,
         label: food.name,
@@ -326,7 +380,7 @@ function App({
         w: rarityWeight(food.r),
       };
     });
-  }, [active, pool, wheelMode]);
+  }, [active, categories, gameCategories, pool, wheelMode]);
 
   const wheelMarker = getWheelMarkerSize(wheelEntries.length);
   const wheelGradient = wheelEntries.length
@@ -363,8 +417,25 @@ function App({
     }
   };
 
+  const navigateToPage = (nextPage: Page) => {
+    setMenuOpen(false);
+    setPage(nextPage);
+    const nextHash = pageHash(nextPage);
+    window.history.pushState(null, "", `${window.location.pathname}${window.location.search}${nextHash}`);
+  };
+
   const addHistory = (entry: Omit<HistoryEntry, "id">) => {
     setHistory((current) => [{ id: createHistoryId(), ...entry }, ...current].slice(0, 30));
+  };
+
+  const addStoredHistory = (entry: Omit<PickHistoryEntry, "id" | "createdAt">) => {
+    setDataHistory((current) =>
+      addHistoryEntry(current, {
+        ...entry,
+        id: createDataHistoryId(),
+        createdAt: new Date().toISOString(),
+      }),
+    );
   };
 
   const commitHistory = (nextDraws: Draw[]) => {
@@ -378,13 +449,21 @@ function App({
     }
 
     const tier = rarityTier(best.item.r);
+    const label = nextDraws.length > 1 ? `${best.item.name} 等 ${nextDraws.length} 项` : best.item.name;
     committedRef.current = true;
     setLastDraws(nextDraws);
     addHistory({
-      label: nextDraws.length > 1 ? `${best.item.name} 等 ${nextDraws.length} 项` : best.item.name,
+      label,
       meta: nextDraws.length > 1 ? "十连召唤" : "单抽召唤",
       code: tier.code,
       color: tier.color,
+    });
+    addStoredHistory({
+      foodId: best.item.id,
+      label,
+      mode: "gacha",
+      poolSize: pool.length,
+      rarity: best.item.r,
     });
   };
 
@@ -425,7 +504,7 @@ function App({
     setRevealedCount(0);
     setAuraRarity(Math.max(...nextDraws.map((draw) => draw.item.r)) as Rarity);
     setFlash(null);
-    setShowHistory(false);
+    setMenuOpen(false);
     setPhase("summoning");
     addSummonTimer(() => {
       setPhase("revealing");
@@ -501,7 +580,7 @@ function App({
       }
 
       const tier = entry.r ? rarityTier(entry.r) : null;
-      const category = entry.cat ? categoryById(CATEGORIES, entry.cat) : null;
+      const category = entry.cat ? categoryById(gameCategories, entry.cat) : null;
       const result: WheelResult =
         wheelMode === "category"
           ? {
@@ -529,12 +608,105 @@ function App({
         code: result.isCat ? "WHEEL" : tier?.code ?? "R",
         color: result.isCat ? result.color : tier?.color ?? result.color,
       });
+      addStoredHistory({
+        foodId: result.isCat ? undefined : result.id,
+        categoryId: result.isCat ? result.id : category?.id,
+        label: result.name,
+        mode: result.isCat ? "category-wheel" : "food-wheel",
+        poolSize: wheelEntries.length,
+        rarity: result.r,
+      });
     }, wheelDelay);
+  };
+
+  const upsertManagedFood = (food: FoodItem) => {
+    setFoods((current) => upsertFoodItem(current, food));
+    setManagedTags((current) => [...new Set([...current, ...food.tags])].sort((a, b) => a.localeCompare(b, "zh-Hans-CN")));
+  };
+
+  const deleteManagedFood = (foodId: string) => {
+    setFoods((current) => current.filter((food) => food.id !== foodId));
+    setFavorites((current) => current.filter((id) => id !== foodId));
+  };
+
+  const upsertManagedCategory = (category: FoodCategory) => {
+    setCategories((current) => {
+      const existing = current.findIndex((item) => item.id === category.id);
+      if (existing === -1) {
+        return [...current, category].sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, "zh-Hans-CN"));
+      }
+
+      return current
+        .map((item) => (item.id === category.id ? category : item))
+        .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, "zh-Hans-CN"));
+    });
+  };
+
+  const deleteManagedCategory = (categoryId: string) => {
+    const foodIdsInCategory = new Set(foods.filter((food) => food.categoryId === categoryId).map((food) => food.id));
+    setCategories((current) => current.filter((category) => category.id !== categoryId));
+    setFoods((current) => current.filter((food) => food.categoryId !== categoryId));
+    setFavorites((current) => current.filter((id) => !foodIdsInCategory.has(id)));
+    setActive((current) => {
+      const next = { ...current };
+      delete next[categoryId];
+      return next;
+    });
+  };
+
+  const addManagedTag = (tag: string) => {
+    setManagedTags((current) => [...new Set([...current, tag])].sort((a, b) => a.localeCompare(b, "zh-Hans-CN")));
+  };
+
+  const renameManagedTag = (oldTag: string, newTag: string) => {
+    setManagedTags((current) =>
+      [...new Set(current.map((tag) => (tag === oldTag ? newTag : tag)))].sort((a, b) =>
+        a.localeCompare(b, "zh-Hans-CN"),
+      ),
+    );
+    setFoods((current) =>
+      current.map((food) => ({
+        ...food,
+        tags: [...new Set(food.tags.map((tag) => (tag === oldTag ? newTag : tag)))],
+      })),
+    );
+  };
+
+  const deleteManagedTag = (tagName: string) => {
+    setManagedTags((current) => current.filter((tag) => tag !== tagName));
+    setFoods((current) =>
+      current.map((food) => ({
+        ...food,
+        tags: food.tags.filter((tag) => tag !== tagName),
+      })),
+    );
+  };
+
+  const toggleFavorite = (foodId: string) => {
+    setFavorites((current) => (current.includes(foodId) ? current.filter((id) => id !== foodId) : [foodId, ...current]));
   };
 
   useEffect(() => {
     saveHistory(history);
   }, [history]);
+
+  useEffect(() => {
+    saveStoredData({ categories, foods, tags, history: dataHistory, favorites });
+  }, [categories, dataHistory, favorites, foods, tags]);
+
+  useEffect(() => {
+    const syncPageFromUrl = () => {
+      setPage(pageFromHash());
+      setMenuOpen(false);
+    };
+
+    window.addEventListener("popstate", syncPageFromUrl);
+    window.addEventListener("hashchange", syncPageFromUrl);
+    return () => {
+      window.removeEventListener("popstate", syncPageFromUrl);
+      window.removeEventListener("hashchange", syncPageFromUrl);
+    };
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -558,7 +730,7 @@ function App({
       <div className="bg-layer bg-layer-glow" aria-hidden="true" />
       <Starfield particleDensity={particleDensity} />
 
-      <div className="app-column">
+      <div className={page === "data" ? "app-column app-column-wide" : "app-column"}>
         <header className="destiny-header">
           <div className="brand">
             <div className="brand-mark">
@@ -571,11 +743,33 @@ function App({
               <p>DESTINY&nbsp;GACHA</p>
             </div>
           </div>
-          <button className="history-button" aria-label="历史记录" onClick={() => setShowHistory(true)}>
-            <span>史</span>
-          </button>
+          <div className="menu-wrap">
+            <button
+              className="menu-button"
+              aria-label="打开菜单"
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              onClick={() => setMenuOpen((current) => !current)}
+            >
+              <Menu aria-hidden="true" />
+            </button>
+            {menuOpen ? (
+              <div className="app-menu" role="menu" aria-label="页面菜单">
+                <button type="button" role="menuitem" onClick={() => navigateToPage("history")}>
+                  <Clock3 aria-hidden="true" />
+                  历史记录
+                </button>
+                <button type="button" role="menuitem" onClick={() => navigateToPage("data")}>
+                  <Database aria-hidden="true" />
+                  数据管理
+                </button>
+              </div>
+            ) : null}
+          </div>
         </header>
 
+        {page === "play" ? (
+          <>
         <nav className="mode-tabs" aria-label="模式">
           <button
             className={mode === "gacha" ? "active" : ""}
@@ -598,7 +792,7 @@ function App({
         </nav>
 
         <div className="category-strip" aria-label="大类筛选">
-          {CATEGORIES.map((category) => {
+          {gameCategories.map((category) => {
             const on = active[category.id] !== false;
             return (
               <button
@@ -786,10 +980,102 @@ function App({
             </section>
           )}
         </main>
+          </>
+        ) : page === "history" ? (
+          <main className="main-stage page-stage">
+            <section className="history-page" aria-labelledby="history-page-title">
+              <div className="page-heading">
+                <button type="button" className="page-back" onClick={() => navigateToPage("play")}>
+                  <ArrowLeft aria-hidden="true" />
+                  返回召唤
+                </button>
+                <div className="drawer-head">
+                  <h2 id="history-page-title">命运记录</h2>
+                  <span>最近 {history.length} 次</span>
+                </div>
+              </div>
+              <div className="drawer-settings" aria-label="设置">
+                <div className="accent-options" aria-label="主题色">
+                  {ACCENT_OPTIONS.map((option) => (
+                    <button
+                      key={option}
+                      aria-label={`主题色 ${option}`}
+                      className={accent === option ? "active" : ""}
+                      style={{ "--swatch": option } as CSSProperties}
+                      onClick={() => setAccent(option)}
+                    />
+                  ))}
+                </div>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={tenPullGuarantee}
+                    onChange={(event) => setTenPullGuarantee(event.target.checked)}
+                  />
+                  <span>十连保底 4★+</span>
+                </label>
+                <label>
+                  <span>星尘</span>
+                  <input
+                    type="range"
+                    min="0.3"
+                    max="2"
+                    step="0.1"
+                    value={particleDensity}
+                    onChange={(event) => setParticleDensity(clampParticleDensity(Number(event.target.value)))}
+                  />
+                </label>
+              </div>
+              {history.length ? (
+                <div className="history-list">
+                  {history.map((entry) => (
+                    <div
+                      key={entry.id}
+                      data-testid="history-row"
+                      className="history-row"
+                      style={{ "--history-color": entry.color } as CSSProperties}
+                    >
+                      <span className="history-bar" />
+                      <div>
+                        <strong>{entry.label}</strong>
+                        <small>{entry.meta}</small>
+                      </div>
+                      <em>{entry.code}</em>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="history-empty">尚无记录 —— 去召唤你的第一餐吧。</p>
+              )}
+            </section>
+          </main>
+        ) : (
+          <main className="main-stage data-page-stage">
+            <button type="button" className="page-back" onClick={() => navigateToPage("play")}>
+              <ArrowLeft aria-hidden="true" />
+              返回召唤
+            </button>
+            <DataManager
+              categories={categories}
+              foods={foods}
+              tags={tags}
+              favorites={favorites}
+              filteredCount={pool.length}
+              onUpsertFood={upsertManagedFood}
+              onDeleteFood={deleteManagedFood}
+              onToggleFavorite={toggleFavorite}
+              onUpsertCategory={upsertManagedCategory}
+              onDeleteCategory={deleteManagedCategory}
+              onAddTag={addManagedTag}
+              onRenameTag={renameManagedTag}
+              onDeleteTag={deleteManagedTag}
+            />
+          </main>
+        )}
 
       </div>
 
-      {mode === "gacha" ? (
+      {page === "play" && mode === "gacha" ? (
         <div className="action-bar">
           <div>
             <button className="draw-one" disabled={pool.length === 0 || overlayOpen} onClick={() => doDraw(1)}>
@@ -870,72 +1156,6 @@ function App({
       ) : null}
 
       {flash ? <div className="screen-flash" style={{ "--flash-color": flash } as CSSProperties} /> : null}
-
-      {showHistory ? (
-        <>
-          <button className="history-scrim" aria-label="关闭历史记录" onClick={() => setShowHistory(false)} />
-          <aside className="history-drawer" aria-label="命运记录">
-            <div className="drawer-handle" />
-            <div className="drawer-head">
-              <h2>命运记录</h2>
-              <span>最近 {history.length} 次</span>
-            </div>
-            <div className="drawer-settings" aria-label="设置">
-              <div className="accent-options" aria-label="主题色">
-                {ACCENT_OPTIONS.map((option) => (
-                  <button
-                    key={option}
-                    aria-label={`主题色 ${option}`}
-                    className={accent === option ? "active" : ""}
-                    style={{ "--swatch": option } as CSSProperties}
-                    onClick={() => setAccent(option)}
-                  />
-                ))}
-              </div>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={tenPullGuarantee}
-                  onChange={(event) => setTenPullGuarantee(event.target.checked)}
-                />
-                <span>十连保底 4★+</span>
-              </label>
-              <label>
-                <span>星尘</span>
-                <input
-                  type="range"
-                  min="0.3"
-                  max="2"
-                  step="0.1"
-                  value={particleDensity}
-                  onChange={(event) => setParticleDensity(clampParticleDensity(Number(event.target.value)))}
-                />
-              </label>
-            </div>
-            {history.length ? (
-              <div className="history-list">
-                {history.map((entry) => (
-                  <div
-                    key={entry.id}
-                    data-testid="history-row"
-                    className="history-row"
-                    style={{ "--history-color": entry.color } as CSSProperties}
-                  >
-                    <span className="history-bar" />
-                    <div>
-                      <strong>{entry.label}</strong>
-                      <small>{entry.meta}</small>
-                    </div>
-                    <em>{entry.code}</em>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="history-empty">尚无记录 —— 去召唤你的第一餐吧。</p>
-            )}
-          </aside>
-        </>
-      ) : null}
     </div>
   );
 }
